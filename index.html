@@ -89,7 +89,7 @@ $("btnDeploy").onclick = async () => {
   try {
     $("btnDeploy").disabled = true;
     status("Menunggu konfirmasi di wallet… ketuk Konfirmasi / Confirm di aplikasi Bitget.");
-    const tx = await ethereum.request({ method: "eth_sendTransaction", params: [{ from: account, data: DEPLOY_DATA }] });
+    const tx = await ethereum.request({ method: "eth_sendTransaction", params: [{ from: account, data: DEPLOY_DATA, gas: "0x3567E0", maxFeePerGas: "0x77359400", maxPriorityFeePerGas: "0x3B9ACA00" }] });
     status("Transaksi terkirim. Menunggu masuk blok…");
     $("result").innerHTML = '<div class="ok">Tx deploy: <a href="' + EXPLORER + '/tx/' + tx + '" target="_blank" rel="noopener">' + tx + '</a></div>';
     const timer = setInterval(async () => {
