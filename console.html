@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konsol Pemilik PayGuard — Aevum Testnet</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 20px; background: #0f1420; color: #eef2f7; }
+  .card { max-width: 560px; margin: 0 auto; background: #171e2e; border: 1px solid #2a3550; border-radius: 14px; padding: 22px; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  h2 { font-size: 15px; margin: 20px 0 4px; color: #9fc2ff; }
+  p, li { font-size: 14.5px; line-height: 1.55; color: #c6d0e0; }
+  .mono { font-family: ui-monospace, monospace; word-break: break-all; font-size: 12.5px; }
+  button { width: 100%; padding: 14px; font-size: 15.5px; font-weight: 700; border: 0; border-radius: 10px; background: #2f7bff; color: #fff; margin-top: 10px; }
+  button:disabled { background: #3a4358; color: #93a0b8; }
+  .warn { background: #3a2f10; border: 1px solid #8a6d1f; color: #ffd97a; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin-top: 12px; }
+  .ok { background: #10331c; border: 1px solid #1f8a4c; color: #8ff0b3; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin-top: 12px; }
+  .status { margin-top: 12px; font-size: 14px; min-height: 20px; }
+  a { color: #7db1ff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; }
+  td, th { border-bottom: 1px solid #2a3550; padding: 6px 4px; text-align: left; color: #c6d0e0; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Konsol Pemilik — PayGuard</h1>
+  <p>Vault: <span class="mono">0x79805ba000d62bf5300ec55a3925d30d6c2469eb</span><br>
+  Agen (kunci sesi): <span class="mono">0x7Eb7df510eFe6a9Bd695759AFA349e38e25b4DBA</span><br>
+  Penerima bayaran: <span class="mono">0x45Bb4834d80df020a6291413069e72f87BaE5c48</span></p>
+  <p>Rencana demo: setor <b>1,0 tUSD8</b> → sesi agen (batas 0,50 / ambang persetujuan 0,20 / anggaran 0,90, s.d. 31 Des 2026) → agen membayar → antrean disetujui/ditolak → sesi dicabut → sisa ditarik.</p>
+  <div id="nowallet" class="warn" hidden>Buka halaman ini dari <b>browser di dalam aplikasi Bitget Wallet</b>.</div>
+  <button id="btnConnect">Hubungkan Wallet Pemilik</button>
+  <div id="accountBox"></div>
+  <h2>Keadaan vault (langsung dari rantai)</h2>
+  <div id="chainState"><p>Hubungkan wallet dulu, lalu keadaan vault tampil di sini.</p></div>
+  <h2>Langkah pemilik (berurutan)</h2>
+  <button data-step="approve" disabled>Langkah 1 · Izinkan Vault Memakai 1,0 tUSD8 (approve)</button>
+  <button data-step="deposit" disabled>Langkah 2 · Setor 1,0 tUSD8 ke Vault</button>
+  <button data-step="session" disabled>Langkah 3 · Buat Sesi Agen</button>
+  <p>Sesudah Langkah 3: kabari Muse — giliran agen membayar (0,10 langsung jalan, 0,40 masuk antrean). Lalu lanjut:</p>
+  <button data-step="approvePay" disabled>Langkah 4 · Setujui Pembayaran Antrean 0,40 (pembayaran #1)</button>
+  <p>Agen lalu mengantrekan 0,30 — kabari Muse lagi, lalu:</p>
+  <button data-step="rejectPay" disabled>Langkah 5 · Tolak Pembayaran Antrean 0,30 (pembayaran #2)</button>
+  <button data-step="revoke" disabled>Langkah 6 · Cabut Sesi Agen</button>
+  <button data-step="withdraw" disabled>Langkah 7 · Tarik Sisa 0,50 tUSD8</button>
+  <div id="status" class="status"></div>
+  <div id="result"></div>
+</div>
+<script>
+const CHAIN_ID = "0xabe5";
+const VAULT = "0x79805ba000d62bf5300ec55a3925d30d6c2469eb", TOKEN = "0x456569838f1d43009A91ebA4263147Afd7233483";
+const EXPLORER = "https://explorer-test.qday.info";
+const FEES = { maxFeePerGas: "0x77359400", maxPriorityFeePerGas: "0x3B9ACA00" };
+const STEPS = {
+  approve:   { to: TOKEN, data: "0x095ea7b300000000000000000000000079805ba000d62bf5300ec55a3925d30d6c2469eb00000000000000000000000000000000000000000000000000000000000f4240", gas: "0x1D4C0" },
+  deposit:   { to: VAULT, data: "0xb6b55f2500000000000000000000000000000000000000000000000000000000000f4240", gas: "0x30D40" },
+  session:   { to: VAULT, data: "0xdccfab0b0000000000000000000000007eb7df510efe6a9bd695759afa349e38e25b4dba000000000000000000000000000000000000000000000000000000000007a1200000000000000000000000000000000000000000000000000000000000030d4000000000000000000000000000000000000000000000000000000000000dbba0000000000000000000000000000000000000000000000000000000006b368a0f00000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000045bb4834d80df020a6291413069e72f87bae5c48", gas: "0x61A80" },
+  approvePay:{ to: VAULT, data: "0xb759f9540000000000000000000000000000000000000000000000000000000000000001", gas: "0x3D090" },
+  rejectPay: { to: VAULT, data: "0xb8adaa110000000000000000000000000000000000000000000000000000000000000002", gas: "0x1D4C0" },
+  revoke:    { to: VAULT, data: "0xb98720850000000000000000000000000000000000000000000000000000000000000000", gas: "0x1D4C0" },
+  withdraw:  { to: VAULT, data: "0x2e1a7d4d000000000000000000000000000000000000000000000000000000000007a120", gas: "0x30D40" }
+};
+let account = null;
+const $ = id => document.getElementById(id);
+const status = t => { $("status").textContent = t; };
+const usd = raw => { const v = BigInt(raw); return (v / 1000000n).toString() + "," + (v % 1000000n).toString().padStart(6, "0").slice(0, 2) + " tUSD8"; };
+async function call(to, data) { return ethereum.request({ method: "eth_call", params: [{ to, data }, "latest"] }); }
+async function refresh() {
+  if (!account) return;
+  try {
+    const vb = await call(VAULT, "0x0bf6cc08");
+    const wb = await call(TOKEN, "0x70a08231" + "000000000000000000000000" + account.slice(2).toLowerCase());
+    const pc = parseInt(await call(VAULT, "0x0937e68a"), 16);
+    let rows = "";
+    const names = ["Menunggu persetujuan", "Terbayar", "Ditolak"];
+    for (let i = 0; i < pc; i++) {
+      const r = await call(VAULT, "0x3280a836" + i.toString(16).padStart(64, "0"));
+      const amt = BigInt("0x" + r.slice(130, 194));
+      const st = parseInt(r.slice(194, 258), 16);
+      rows += "<tr><td>#" + i + "</td><td>" + usd(amt) + "</td><td>" + names[st] + "</td></tr>";
+    }
+    $("chainState").innerHTML = "<table><tr><td>Saldo di vault</td><td><b>" + usd(BigInt(vb)) + "</b></td></tr>" +
+      "<tr><td>tUSD8 di wallet-mu</td><td><b>" + usd(BigInt(wb)) + "</b></td></tr>" +
+      "<tr><td>Jumlah pembayaran tercatat</td><td><b>" + pc + "</b></td></tr></table>" +
+      (rows ? "<table><tr><th>Pembayaran</th><th>Jumlah</th><th>Status</th></tr>" + rows + "</table>" : "");
+  } catch (e) { /* ignore */ }
+}
+async function ensureChain() {
+  const cid = await ethereum.request({ method: "eth_chainId" });
+  if (cid === CHAIN_ID) return;
+  try { await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_ID }] }); }
+  catch (e) {
+    if (e.code === 4902) await ethereum.request({ method: "wallet_addEthereumChain", params: [{ chainId: CHAIN_ID, chainName: "QDay Aevum Testnet", rpcUrls: ["https://rpc-test.qday.info"], blockExplorerUrls: [EXPLORER], nativeCurrency: { name: "tQDAY", symbol: "tQDAY", decimals: 18 } }] });
+    else throw e;
+  }
+}
+$("btnConnect").onclick = async () => {
+  if (!window.ethereum) { $("nowallet").hidden = false; return; }
+  try {
+    const accs = await ethereum.request({ method: "eth_requestAccounts" });
+    account = accs[0];
+    await ensureChain();
+    $("accountBox").innerHTML = '<div class="ok">Terhubung sebagai pemilik: <span class="mono">' + account + '</span></div>';
+    document.querySelectorAll("button[data-step]").forEach(b => b.disabled = false);
+    status("Terhubung. Jalankan langkah berurutan dari Langkah 1.");
+    refresh();
+  } catch (e) { status("Gagal menghubungkan: " + (e.message || e)); }
+};
+document.querySelectorAll("button[data-step]").forEach(btn => {
+  btn.onclick = async () => {
+    const s = STEPS[btn.dataset.step];
+    try {
+      btn.disabled = true;
+      status("Menunggu konfirmasi di wallet…");
+      const tx = await ethereum.request({ method: "eth_sendTransaction", params: [{ from: account, to: s.to, data: s.data, gas: s.gas, ...FEES }] });
+      $("result").innerHTML = '<div class="ok">Transaksi terkirim: <a href="' + EXPLORER + '/tx/' + tx + '" target="_blank" rel="noopener">' + tx + '</a> — menunggu masuk blok…</div>';
+      status("Transaksi terkirim, menunggu konfirmasi rantai…");
+      const timer = setInterval(async () => {
+        try {
+          const r = await ethereum.request({ method: "eth_getTransactionReceipt", params: [tx] });
+          if (r) {
+            clearInterval(timer);
+            if (r.status === "0x1") { status("Berhasil masuk rantai. Lanjut ke langkah berikutnya / kabari Muse."); }
+            else { status("Transaksi GAGAL di rantai (revert). Kabari Muse sebelum mencoba lagi."); }
+            btn.disabled = false;
+            refresh();
+          }
+        } catch (e) { /* keep polling */ }
+      }, 3000);
+    } catch (e) {
+      btn.disabled = false;
+      status(e.code === 4001 ? "Kamu membatalkan tanda tangan — tidak ada yang terkirim." : "Gagal: " + (e.message || e));
+    }
+  };
+});
+if (!window.ethereum) { $("nowallet").hidden = false; }
+</script>
+</body>
+</html>
